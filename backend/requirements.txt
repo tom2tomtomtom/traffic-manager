@@ -1,0 +1,26 @@
+# FastAPI and ASGI server
+fastapi==0.115.0
+uvicorn[standard]==0.32.0
+
+# AI Integration
+anthropic==0.75.0
+
+# Database
+supabase==2.15.0
+
+# Data validation
+pydantic==2.12.0
+pydantic-settings==2.7.0
+
+# Environment management
+python-dotenv==1.0.0
+
+# HTTP client
+httpx==0.28.1
+
+# Testing
+pytest==8.3.0
+pytest-asyncio==0.24.0
+
+# Linting and formatting
+ruff==0.8.0
