@@ -10,6 +10,11 @@ interface TeamMemberCapacity {
   available_hours: number
   utilization_pct: number
   overallocated: boolean
+  core_roles?: string[]
+  capabilities?: string[]
+  industries?: string[]
+  permission_level?: string
+  known_clients?: string[]
 }
 
 interface CapacityHeatmapProps {
@@ -70,6 +75,39 @@ export function CapacityHeatmap({ teamMembers }: CapacityHeatmapProps) {
                 {Math.round(member.utilization_pct)}%
               </span>
             </div>
+
+            {/* Capabilities Tags */}
+            {(member.core_roles?.length || member.industries?.length) && (
+              <div className="flex flex-wrap gap-1 mb-3">
+                {member.core_roles?.slice(0, 2).map((role) => (
+                  <span
+                    key={role}
+                    className="px-2 py-0.5 text-[10px] uppercase font-bold bg-orange-accent/20 text-orange-accent"
+                  >
+                    {role}
+                  </span>
+                ))}
+                {member.industries?.slice(0, 2).map((industry) => (
+                  <span
+                    key={industry}
+                    className="px-2 py-0.5 text-[10px] uppercase font-bold bg-white-dim/20 text-white-muted"
+                  >
+                    {industry}
+                  </span>
+                ))}
+              </div>
+            )}
+
+            {/* Known Clients */}
+            {member.known_clients && member.known_clients.length > 0 && (
+              <div className="mb-3">
+                <p className="text-white-dim text-[10px] uppercase mb-1">Clients</p>
+                <p className="text-white-muted text-xs">
+                  {member.known_clients.slice(0, 3).join(', ')}
+                  {member.known_clients.length > 3 && ` +${member.known_clients.length - 3}`}
+                </p>
+              </div>
+            )}
 
             {/* Stats */}
             <div className="space-y-2 text-sm">

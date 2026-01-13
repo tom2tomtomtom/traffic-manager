@@ -53,7 +53,7 @@ export function TranscriptUpload() {
 
       // Redirect to review page
       setTimeout(() => {
-        router.push(`/dashboard/review/${result.transcript_id}`)
+        router.push(`/review/${result.transcript_id}`)
       }, 500)
     } catch (err) {
       clearInterval(progressInterval)

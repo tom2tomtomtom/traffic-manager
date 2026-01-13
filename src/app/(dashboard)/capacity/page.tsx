@@ -1,75 +1,123 @@
 import { PageHeader } from '@/components/layouts/page-header'
-import { CapacityHeatmap } from '@/components/features/capacity-heatmap'
+import { CapacityDashboard } from '@/components/features/capacity-dashboard'
 import { createClient } from '@/lib/supabase/server'
 
-export default async function CapacityPage() {
+async function getCapacityData(weekOffset: number = 0) {
   const supabase = await createClient()
 
-  // Fetch current week capacity from the view
-  const { data: teamCapacity, error } = await supabase
-    .from('current_week_capacity')
+  // Calculate week start based on offset
+  const today = new Date()
+  const dayOfWeek = today.getDay()
+  const mondayOffset = dayOfWeek === 0 ? -6 : 1 - dayOfWeek
+
+  const weekStart = new Date(today)
+  weekStart.setDate(today.getDate() + mondayOffset + (weekOffset * 7))
+  weekStart.setHours(0, 0, 0, 0)
+
+  const weekEnd = new Date(weekStart)
+  weekEnd.setDate(weekStart.getDate() + 6)
+  weekEnd.setHours(23, 59, 59, 999)
+
+  // Fetch team members
+  const { data: teamMembers } = await supabase
+    .from('team_members')
     .select('*')
+    .eq('active', true)
+    .order('full_name')
 
-  if (error) {
-    console.error('Error fetching capacity:', error)
+  // Fetch assignments
+  const { data: assignments } = await supabase
+    .from('assignments')
+    .select('id, team_member_id, project_id, role_on_project, hours_this_week, estimated_hours, status')
+    .eq('status', 'active')
+
+  // Fetch projects
+  const projectIds = [...new Set(assignments?.map(a => a.project_id) || [])]
+  const { data: projects } = projectIds.length > 0
+    ? await supabase.from('projects').select('id, name, client_name').in('id', projectIds)
+    : { data: [] }
+
+  const projectMap = new Map(projects?.map(p => [p.id, p]) || [])
+
+  // Build allocation and assignments map
+  const memberAssignments = new Map<string, Array<{
+    id: string
+    project_id: string
+    project_name: string
+    client_name: string
+    role: string
+    hours_this_week: number
+    estimated_hours: number
+    status: string
+  }>>()
+  const allocationMap = new Map<string, number>()
+
+  assignments?.forEach(a => {
+    const current = allocationMap.get(a.team_member_id) || 0
+    allocationMap.set(a.team_member_id, current + (a.hours_this_week || 0))
+
+    const project = projectMap.get(a.project_id)
+    const assignWithProject = {
+      id: a.id,
+      project_id: a.project_id,
+      project_name: project?.name || 'Unknown Project',
+      client_name: project?.client_name || '',
+      role: a.role_on_project || '',
+      hours_this_week: a.hours_this_week || 0,
+      estimated_hours: a.estimated_hours || 0,
+      status: a.status || 'active',
+    }
+
+    const existing = memberAssignments.get(a.team_member_id) || []
+    existing.push(assignWithProject)
+    memberAssignments.set(a.team_member_id, existing)
+  })
+
+  // Transform to capacity data
+  const capacityData = (teamMembers || []).map(member => {
+    const allocated = allocationMap.get(member.id) || 0
+    const memberAssigns = memberAssignments.get(member.id) || []
+
+    return {
+      id: member.id,
+      full_name: member.full_name,
+      role: member.role,
+      weekly_capacity_hours: member.weekly_capacity_hours || 40,
+      allocated_hours: allocated,
+      available_hours: (member.weekly_capacity_hours || 40) - allocated,
+      utilization_pct: member.weekly_capacity_hours > 0
+        ? (allocated / member.weekly_capacity_hours) * 100
+        : 0,
+      overallocated: allocated > (member.weekly_capacity_hours || 40),
+      core_roles: member.core_roles || [],
+      capabilities: member.capabilities || [],
+      industries: member.industries || [],
+      permission_level: member.permission_level || 'Executor',
+      known_clients: member.known_clients || [],
+      assignments: memberAssigns,
+    }
+  })
+
+  return {
+    weekStart: weekStart.toISOString().split('T')[0],
+    weekEnd: weekEnd.toISOString().split('T')[0],
+    weekOffset,
+    teamMembers: capacityData,
   }
+}
 
-  // Transform data for the component
-  const capacityData = (teamCapacity || []).map((member) => ({
-    id: member.id,
-    full_name: member.full_name,
-    role: member.role,
-    weekly_capacity_hours: member.weekly_capacity_hours || 40,
-    allocated_hours: member.allocated_hours || 0,
-    available_hours: member.available_hours || member.weekly_capacity_hours || 40,
-    utilization_pct: member.utilization_pct || 0,
-    overallocated: member.overallocated || false,
-  }))
-
-  // Check for overallocated team members
-  const overallocatedMembers = capacityData.filter((m) => m.overallocated)
+export default async function CapacityPage() {
+  const initialData = await getCapacityData(0)
 
   return (
     <div>
       <PageHeader
         title="Team Capacity"
-        description="View current week capacity allocation across the team."
+        description="View and manage weekly capacity allocation across the team."
       />
 
-      {/* Overallocation warning */}
-      {overallocatedMembers.length > 0 && (
-        <div className="mt-6 bg-black-card border-2 border-red-hot p-4">
-          <p className="text-red-hot font-bold uppercase text-sm">
-            Capacity Conflicts Detected
-          </p>
-          <p className="text-white-muted text-sm mt-2">
-            {overallocatedMembers.length} team member
-            {overallocatedMembers.length > 1 ? 's are' : ' is'} overallocated
-            this week:
-          </p>
-          <ul className="mt-2 space-y-1">
-            {overallocatedMembers.map((m) => (
-              <li key={m.id} className="text-white-full text-sm">
-                <span className="text-orange-accent">{m.full_name}</span>:{' '}
-                {m.allocated_hours}h allocated / {m.weekly_capacity_hours}h
-                capacity
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-
-      {/* Capacity heatmap */}
-      <div className="mt-8">
-        {capacityData.length > 0 ? (
-          <CapacityHeatmap teamMembers={capacityData} />
-        ) : (
-          <div className="bg-black-card border-2 border-border-subtle p-8 text-center">
-            <p className="text-white-muted">
-              No team members found. Add team members to see capacity.
-            </p>
-          </div>
-        )}
+      <div className="mt-6">
+        <CapacityDashboard initialData={initialData} />
       </div>
     </div>
   )

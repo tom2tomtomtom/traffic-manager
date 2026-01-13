@@ -5,7 +5,7 @@ import { usePathname } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import { cn } from '@/lib/utils'
-import { Upload, BarChart3, LogOut, User } from 'lucide-react'
+import { Upload, BarChart3, LogOut, User, FileText, FolderKanban, Users, LayoutDashboard } from 'lucide-react'
 import type { User as SupabaseUser } from '@supabase/supabase-js'
 
 interface NavItem {
@@ -16,14 +16,34 @@ interface NavItem {
 
 const navItems: NavItem[] = [
   {
+    label: 'Home',
+    href: '/',
+    icon: <LayoutDashboard className="w-4 h-4" />,
+  },
+  {
     label: 'Upload',
-    href: '/dashboard/upload',
+    href: '/upload',
     icon: <Upload className="w-4 h-4" />,
   },
   {
+    label: 'Transcripts',
+    href: '/transcripts',
+    icon: <FileText className="w-4 h-4" />,
+  },
+  {
+    label: 'Projects',
+    href: '/projects',
+    icon: <FolderKanban className="w-4 h-4" />,
+  },
+  {
     label: 'Capacity',
-    href: '/dashboard/capacity',
+    href: '/capacity',
     icon: <BarChart3 className="w-4 h-4" />,
+  },
+  {
+    label: 'Team',
+    href: '/team',
+    icon: <Users className="w-4 h-4" />,
   },
 ]
 
@@ -48,7 +68,7 @@ export function DashboardNav({ user }: DashboardNavProps) {
         <div className="flex items-center justify-between h-16">
           {/* Logo */}
           <div className="flex items-center gap-8">
-            <Link href="/dashboard/upload" className="flex items-center gap-2">
+            <Link href="/" className="flex items-center gap-2">
               <span className="text-xl font-bold text-red-hot uppercase tracking-wider">
                 Alt/Shift
               </span>
@@ -60,7 +80,9 @@ export function DashboardNav({ user }: DashboardNavProps) {
             {/* Nav Links */}
             <div className="flex items-center gap-1">
               {navItems.map((item) => {
-                const isActive = pathname === item.href || pathname.startsWith(item.href + '/')
+                const isActive = item.href === '/'
+                  ? pathname === '/'
+                  : pathname === item.href || pathname.startsWith(item.href + '/')
                 return (
                   <Link
                     key={item.href}
