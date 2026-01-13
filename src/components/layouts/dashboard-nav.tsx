@@ -5,13 +5,15 @@ import { usePathname } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import { cn } from '@/lib/utils'
-import { Upload, BarChart3, LogOut, User, FileText, FolderKanban, Users, LayoutDashboard } from 'lucide-react'
+import { Upload, BarChart3, LogOut, User, FileText, FolderKanban, Users, LayoutDashboard, Settings } from 'lucide-react'
 import type { User as SupabaseUser } from '@supabase/supabase-js'
+import { UserRole, canEdit, getRoleInfo } from '@/lib/auth/permissions'
 
 interface NavItem {
   label: string
   href: string
   icon: React.ReactNode
+  requiresEdit?: boolean  // Only show if user can edit
 }
 
 const navItems: NavItem[] = [
@@ -24,6 +26,7 @@ const navItems: NavItem[] = [
     label: 'Upload',
     href: '/upload',
     icon: <Upload className="w-4 h-4" />,
+    requiresEdit: true,
   },
   {
     label: 'Transcripts',
@@ -45,22 +48,37 @@ const navItems: NavItem[] = [
     href: '/team',
     icon: <Users className="w-4 h-4" />,
   },
+  {
+    label: 'Setup',
+    href: '/setup',
+    icon: <Settings className="w-4 h-4" />,
+    requiresEdit: true,
+  },
 ]
 
 interface DashboardNavProps {
   user: SupabaseUser
+  role: UserRole
 }
 
-export function DashboardNav({ user }: DashboardNavProps) {
+export function DashboardNav({ user, role }: DashboardNavProps) {
   const pathname = usePathname()
   const router = useRouter()
   const supabase = createClient()
+  const userCanEdit = canEdit(role)
+  const roleInfo = getRoleInfo(role)
 
   const handleSignOut = async () => {
     await supabase.auth.signOut()
     router.push('/login')
     router.refresh()
   }
+
+  // Filter nav items based on role
+  const visibleNavItems = navItems.filter(item => {
+    if (item.requiresEdit && !userCanEdit) return false
+    return true
+  })
 
   return (
     <nav className="fixed top-0 left-0 right-0 z-50 bg-black-deep border-b-2 border-border-subtle">
@@ -79,7 +97,7 @@ export function DashboardNav({ user }: DashboardNavProps) {
 
             {/* Nav Links */}
             <div className="flex items-center gap-1">
-              {navItems.map((item) => {
+              {visibleNavItems.map((item) => {
                 const isActive = item.href === '/'
                   ? pathname === '/'
                   : pathname === item.href || pathname.startsWith(item.href + '/')
@@ -105,6 +123,14 @@ export function DashboardNav({ user }: DashboardNavProps) {
 
           {/* User Menu */}
           <div className="flex items-center gap-4">
+            {/* Role Badge */}
+            <span className={cn(
+              'px-2 py-1 text-[10px] uppercase font-bold tracking-wide hidden sm:block',
+              roleInfo.color
+            )}>
+              {roleInfo.label}
+            </span>
+
             <div className="flex items-center gap-2 text-white-muted">
               <User className="w-4 h-4" />
               <span className="text-xs uppercase tracking-wide hidden sm:block">

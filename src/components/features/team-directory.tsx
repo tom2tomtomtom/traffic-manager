@@ -6,6 +6,7 @@ import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { User, Edit2, X, Plus, Check, Trash2 } from 'lucide-react'
+import { useCanEdit } from '@/lib/auth/user-context'
 
 interface TeamMember {
   id: string
@@ -28,6 +29,7 @@ interface TeamDirectoryProps {
 
 export function TeamDirectory({ initialMembers }: TeamDirectoryProps) {
   const router = useRouter()
+  const canEdit = useCanEdit()
   const [members, setMembers] = useState(initialMembers)
   const [showInactive, setShowInactive] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
@@ -208,12 +210,14 @@ export function TeamDirectory({ initialMembers }: TeamDirectoryProps) {
                       <p className="text-white-dim text-xs uppercase">{member.role}</p>
                     </div>
                   </div>
-                  <button
-                    onClick={() => openEditModal(member)}
-                    className="p-2 text-white-dim hover:text-orange-accent transition-colors"
-                  >
-                    <Edit2 className="w-4 h-4" />
-                  </button>
+                  {canEdit && (
+                    <button
+                      onClick={() => openEditModal(member)}
+                      className="p-2 text-white-dim hover:text-orange-accent transition-colors"
+                    >
+                      <Edit2 className="w-4 h-4" />
+                    </button>
+                  )}
                 </div>
 
                 {/* Capacity */}

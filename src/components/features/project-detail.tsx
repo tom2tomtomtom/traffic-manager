@@ -7,6 +7,7 @@ import { Card } from '@/components/ui/card'
 import { ConfidenceBadge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
 import { Users, Clock, Calendar, Plus, Trash2, AlertTriangle, Sparkles, Check, X } from 'lucide-react'
+import { useCanEdit } from '@/lib/auth/user-context'
 
 interface Recommendation {
   team_member_id: string | null
@@ -67,6 +68,7 @@ interface ProjectDetailProps {
 
 export function ProjectDetail({ project, assignments: initialAssignments, availableMembers }: ProjectDetailProps) {
   const router = useRouter()
+  const canEdit = useCanEdit()
   const [assignments, setAssignments] = useState(initialAssignments)
   const [showAddModal, setShowAddModal] = useState(false)
   const [selectedMember, setSelectedMember] = useState<string>('')
@@ -228,34 +230,42 @@ export function ProjectDetail({ project, assignments: initialAssignments, availa
         {/* Status */}
         <Card className="p-4">
           <p className="text-white-dim text-xs uppercase mb-2">Status</p>
-          <select
-            value={status}
-            onChange={(e) => handleStatusChange(e.target.value)}
-            disabled={saving}
-            className="w-full bg-black-deep border-2 border-border-subtle text-white-full px-3 py-2 focus:border-orange-accent focus:outline-none"
-          >
-            <option value="briefing">Briefing</option>
-            <option value="active">Active</option>
-            <option value="on-hold">On Hold</option>
-            <option value="completed">Completed</option>
-          </select>
+          {canEdit ? (
+            <select
+              value={status}
+              onChange={(e) => handleStatusChange(e.target.value)}
+              disabled={saving}
+              className="w-full bg-black-deep border-2 border-border-subtle text-white-full px-3 py-2 focus:border-orange-accent focus:outline-none"
+            >
+              <option value="briefing">Briefing</option>
+              <option value="active">Active</option>
+              <option value="on-hold">On Hold</option>
+              <option value="completed">Completed</option>
+            </select>
+          ) : (
+            <p className="text-white-full font-bold capitalize">{status}</p>
+          )}
         </Card>
 
         {/* Phase */}
         <Card className="p-4">
           <p className="text-white-dim text-xs uppercase mb-2">Phase</p>
-          <select
-            value={phase}
-            onChange={(e) => handlePhaseChange(e.target.value)}
-            disabled={saving}
-            className="w-full bg-black-deep border-2 border-border-subtle text-white-full px-3 py-2 focus:border-orange-accent focus:outline-none"
-          >
-            <option value="pre-production">Pre-Production</option>
-            <option value="production">Production</option>
-            <option value="post-production">Post-Production</option>
-            <option value="client-review">Client Review</option>
-            <option value="final-delivery">Final Delivery</option>
-          </select>
+          {canEdit ? (
+            <select
+              value={phase}
+              onChange={(e) => handlePhaseChange(e.target.value)}
+              disabled={saving}
+              className="w-full bg-black-deep border-2 border-border-subtle text-white-full px-3 py-2 focus:border-orange-accent focus:outline-none"
+            >
+              <option value="pre-production">Pre-Production</option>
+              <option value="production">Production</option>
+              <option value="post-production">Post-Production</option>
+              <option value="client-review">Client Review</option>
+              <option value="final-delivery">Final Delivery</option>
+            </select>
+          ) : (
+            <p className="text-white-full font-bold capitalize">{phase.replace('-', ' ')}</p>
+          )}
         </Card>
 
         {/* Deadline */}
@@ -298,22 +308,24 @@ export function ProjectDetail({ project, assignments: initialAssignments, availa
       <div>
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-bold text-white-full uppercase">Team</h2>
-          <div className="flex items-center gap-2">
-            <Button
-              onClick={handleGetRecommendations}
-              size="sm"
-              variant="ghost"
-              className="flex items-center gap-2"
-              disabled={loadingRecommendations}
-            >
-              <Sparkles className="w-4 h-4" />
-              {loadingRecommendations ? 'Getting Suggestions...' : 'AI Suggest'}
-            </Button>
-            <Button onClick={() => setShowAddModal(true)} size="sm" className="flex items-center gap-2">
-              <Plus className="w-4 h-4" />
-              Add Team Member
-            </Button>
-          </div>
+          {canEdit && (
+            <div className="flex items-center gap-2">
+              <Button
+                onClick={handleGetRecommendations}
+                size="sm"
+                variant="ghost"
+                className="flex items-center gap-2"
+                disabled={loadingRecommendations}
+              >
+                <Sparkles className="w-4 h-4" />
+                {loadingRecommendations ? 'Getting Suggestions...' : 'AI Suggest'}
+              </Button>
+              <Button onClick={() => setShowAddModal(true)} size="sm" className="flex items-center gap-2">
+                <Plus className="w-4 h-4" />
+                Add Team Member
+              </Button>
+            </div>
+          )}
         </div>
 
         {assignments.length > 0 ? (
@@ -340,12 +352,14 @@ export function ProjectDetail({ project, assignments: initialAssignments, availa
                       <p className="text-white-full font-bold">{assignment.estimated_hours}h</p>
                       <p className="text-white-dim text-xs">total est.</p>
                     </div>
-                    <button
-                      onClick={() => handleRemoveAssignment(assignment.id)}
-                      className="p-2 text-white-dim hover:text-red-hot transition-colors"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
+                    {canEdit && (
+                      <button
+                        onClick={() => handleRemoveAssignment(assignment.id)}
+                        className="p-2 text-white-dim hover:text-red-hot transition-colors"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    )}
                   </div>
                 </div>
               </Card>
@@ -354,9 +368,11 @@ export function ProjectDetail({ project, assignments: initialAssignments, availa
         ) : (
           <Card className="p-8 text-center">
             <p className="text-white-muted">No team members assigned yet.</p>
-            <Button onClick={() => setShowAddModal(true)} variant="ghost" className="mt-4">
-              Add Team Member
-            </Button>
+            {canEdit && (
+              <Button onClick={() => setShowAddModal(true)} variant="ghost" className="mt-4">
+                Add Team Member
+              </Button>
+            )}
           </Card>
         )}
 

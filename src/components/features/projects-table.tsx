@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { Plus, Search, Users, Clock, Calendar, ChevronRight } from 'lucide-react'
+import { useCanEdit } from '@/lib/auth/user-context'
 
 interface Project {
   id: string
@@ -24,6 +25,7 @@ interface ProjectsTableProps {
 }
 
 export function ProjectsTable({ initialProjects }: ProjectsTableProps) {
+  const canEdit = useCanEdit()
   const [projects] = useState<Project[]>(initialProjects)
   const [searchQuery, setSearchQuery] = useState('')
   const [statusFilter, setStatusFilter] = useState<string>('all')
@@ -135,11 +137,13 @@ export function ProjectsTable({ initialProjects }: ProjectsTableProps) {
           ))}
         </div>
 
-        {/* New Project Button */}
-        <Button onClick={() => setShowNewModal(true)} className="flex items-center gap-2">
-          <Plus className="w-4 h-4" />
-          New Project
-        </Button>
+        {/* New Project Button - only for managers/admins */}
+        {canEdit && (
+          <Button onClick={() => setShowNewModal(true)} className="flex items-center gap-2">
+            <Plus className="w-4 h-4" />
+            New Project
+          </Button>
+        )}
       </div>
 
       {/* Projects Table */}
