@@ -5,7 +5,7 @@ import { usePathname } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import { cn } from '@/lib/utils'
-import { Upload, BarChart3, LogOut, User, FileText, FolderKanban, Users, LayoutDashboard, Settings } from 'lucide-react'
+import { Upload, BarChart3, LogOut, User, FileText, FolderKanban, Users, LayoutDashboard, Settings, Shield } from 'lucide-react'
 import type { User as SupabaseUser } from '@supabase/supabase-js'
 import { UserRole, canEdit, getRoleInfo } from '@/lib/auth/permissions'
 
@@ -14,6 +14,7 @@ interface NavItem {
   href: string
   icon: React.ReactNode
   requiresEdit?: boolean  // Only show if user can edit
+  requiresAdmin?: boolean // Only show if user is admin
 }
 
 const navItems: NavItem[] = [
@@ -54,6 +55,12 @@ const navItems: NavItem[] = [
     icon: <Settings className="w-4 h-4" />,
     requiresEdit: true,
   },
+  {
+    label: 'Admin',
+    href: '/admin',
+    icon: <Shield className="w-4 h-4" />,
+    requiresAdmin: true,
+  },
 ]
 
 interface DashboardNavProps {
@@ -77,6 +84,7 @@ export function DashboardNav({ user, role }: DashboardNavProps) {
   // Filter nav items based on role
   const visibleNavItems = navItems.filter(item => {
     if (item.requiresEdit && !userCanEdit) return false
+    if (item.requiresAdmin && role !== 'admin') return false
     return true
   })
 
