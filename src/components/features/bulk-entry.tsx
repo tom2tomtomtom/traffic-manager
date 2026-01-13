@@ -41,6 +41,7 @@ interface QuickEntry {
   text: string
   projectName: string
   hours: number
+  estimatedHours: number | null
   projectId: string | null
   isNew: boolean
 }
@@ -80,6 +81,7 @@ export function BulkEntry({ teamMembers, projects, existingAssignments }: BulkEn
         text: `${project?.name || 'Unknown'} ${a.hours_this_week}h`,
         projectName: project?.name || 'Unknown',
         hours: a.hours_this_week || 0,
+        estimatedHours: a.estimated_hours || null,
         projectId: a.project_id,
         isNew: false,
       }
@@ -91,17 +93,28 @@ export function BulkEntry({ teamMembers, projects, existingAssignments }: BulkEn
     setTimeout(() => inputRef.current?.focus(), 100)
   }
 
-  // Parse quick text like "Legos 15" or "Officeworks 8h"
-  const parseQuickEntry = (text: string): { projectName: string; hours: number } | null => {
+  // Parse quick text like "Legos 15" or "Legos 15/40" (with estimate)
+  const parseQuickEntry = (text: string): { projectName: string; hours: number; estimatedHours: number | null } | null => {
     const trimmed = text.trim()
     if (!trimmed) return null
 
-    // Match patterns like "Project Name 15" or "Project Name 15h"
+    // Match: "Project Name 15/40" or "Project Name 15/40h" (with estimate)
+    const matchWithEstimate = trimmed.match(/^(.+?)\s+(\d+)\/(\d+)h?$/i)
+    if (matchWithEstimate) {
+      return {
+        projectName: matchWithEstimate[1].trim(),
+        hours: parseInt(matchWithEstimate[2], 10),
+        estimatedHours: parseInt(matchWithEstimate[3], 10),
+      }
+    }
+
+    // Match: "Project Name 15" or "Project Name 15h" (no estimate)
     const match = trimmed.match(/^(.+?)\s+(\d+)h?$/i)
     if (match) {
       return {
         projectName: match[1].trim(),
         hours: parseInt(match[2], 10),
+        estimatedHours: null,
       }
     }
 
@@ -109,6 +122,7 @@ export function BulkEntry({ teamMembers, projects, existingAssignments }: BulkEn
     return {
       projectName: trimmed,
       hours: 8,
+      estimatedHours: null,
     }
   }
 
@@ -143,6 +157,7 @@ export function BulkEntry({ teamMembers, projects, existingAssignments }: BulkEn
         text: quickText,
         projectName: existingProject?.name || parsed.projectName,
         hours: parsed.hours,
+        estimatedHours: parsed.estimatedHours,
         projectId: existingProject?.id || null,
         isNew: true,
       },
@@ -191,6 +206,7 @@ export function BulkEntry({ teamMembers, projects, existingAssignments }: BulkEn
             project_id: e.projectId,
             role_on_project: 'team-member',
             hours_this_week: e.hours,
+            estimated_hours: e.estimatedHours || e.hours,
           })),
         }),
       })
@@ -335,7 +351,7 @@ export function BulkEntry({ teamMembers, projects, existingAssignments }: BulkEn
                       value={quickText}
                       onChange={e => setQuickText(e.target.value)}
                       onKeyDown={handleKeyDown}
-                      placeholder="e.g. Legos 15 or Officeworks 8"
+                      placeholder="e.g. Legos 15 or Legos 15/40 (with estimate)"
                       className="w-full pl-10 pr-4 py-3 bg-black-deep text-white-full border-2 border-border-subtle text-lg focus:border-orange-accent outline-none"
                       autoComplete="off"
                     />
@@ -374,6 +390,11 @@ export function BulkEntry({ teamMembers, projects, existingAssignments }: BulkEn
                     >
                       <div className="flex items-center gap-3">
                         <span className="text-white-full font-medium">{entry.projectName}</span>
+                        {entry.estimatedHours && (
+                          <span className="text-white-dim text-xs">
+                            ({entry.estimatedHours}h total)
+                          </span>
+                        )}
                         {!entry.projectId && entry.isNew && (
                           <span className="text-[10px] uppercase font-bold text-yellow-electric bg-yellow-electric/20 px-2 py-0.5">
                             New Project

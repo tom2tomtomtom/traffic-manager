@@ -7,6 +7,7 @@ interface BulkAssignmentRequest {
     project_id: string
     role_on_project: string
     hours_this_week: number
+    estimated_hours?: number
     existing_id?: string
   }[]
 }
@@ -86,7 +87,7 @@ export async function POST(request: Request) {
           .update({
             role_on_project: assignment.role_on_project,
             hours_this_week: assignment.hours_this_week,
-            estimated_hours: assignment.hours_this_week,
+            estimated_hours: assignment.estimated_hours || assignment.hours_this_week,
           })
           .eq('team_member_id', team_member_id)
           .eq('project_id', assignment.project_id)
@@ -106,7 +107,7 @@ export async function POST(request: Request) {
             project_id: assignment.project_id,
             role_on_project: assignment.role_on_project,
             hours_this_week: assignment.hours_this_week,
-            estimated_hours: assignment.hours_this_week,
+            estimated_hours: assignment.estimated_hours || assignment.hours_this_week,
             status: 'active',
             assigned_by: 'manual',
             confidence_score: 1.0,

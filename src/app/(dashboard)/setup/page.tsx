@@ -1,5 +1,6 @@
 import { PageHeader } from '@/components/layouts/page-header'
 import { BulkEntry } from '@/components/features/bulk-entry'
+import { SetupHelp } from './setup-help'
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import { canEdit, UserRole } from '@/lib/auth/permissions'
@@ -78,6 +79,8 @@ export default async function SetupPage() {
           existingAssignments={assignments}
         />
       </div>
+
+      <SetupHelp />
     </div>
   )
 }
