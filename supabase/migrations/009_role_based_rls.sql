@@ -8,10 +8,13 @@
 -- PROJECTS: Managers/Admins can modify, everyone can view
 -- ============================================================================
 
--- Drop existing permissive write policies
+-- Drop existing policies
 DROP POLICY IF EXISTS "Authenticated users can insert projects" ON projects;
 DROP POLICY IF EXISTS "Authenticated users can update projects" ON projects;
 DROP POLICY IF EXISTS "Authenticated users can delete projects" ON projects;
+DROP POLICY IF EXISTS "Managers can insert projects" ON projects;
+DROP POLICY IF EXISTS "Managers can update projects" ON projects;
+DROP POLICY IF EXISTS "Managers can delete projects" ON projects;
 
 -- Create role-based write policies
 CREATE POLICY "Managers can insert projects"
@@ -30,10 +33,13 @@ USING (can_edit(auth.uid()));
 -- TEAM MEMBERS: Managers/Admins can modify, everyone can view
 -- ============================================================================
 
--- Drop existing permissive write policies
+-- Drop existing policies
 DROP POLICY IF EXISTS "Authenticated users can insert team members" ON team_members;
 DROP POLICY IF EXISTS "Authenticated users can update team members" ON team_members;
 DROP POLICY IF EXISTS "Authenticated users can delete team members" ON team_members;
+DROP POLICY IF EXISTS "Managers can insert team members" ON team_members;
+DROP POLICY IF EXISTS "Managers can update team members" ON team_members;
+DROP POLICY IF EXISTS "Managers can delete team members" ON team_members;
 
 -- Create role-based write policies
 CREATE POLICY "Managers can insert team members"
@@ -52,10 +58,13 @@ USING (can_edit(auth.uid()));
 -- ASSIGNMENTS: Managers/Admins can modify, everyone can view
 -- ============================================================================
 
--- Drop existing permissive write policies
+-- Drop existing policies
 DROP POLICY IF EXISTS "Authenticated users can insert assignments" ON assignments;
 DROP POLICY IF EXISTS "Authenticated users can update assignments" ON assignments;
 DROP POLICY IF EXISTS "Authenticated users can delete assignments" ON assignments;
+DROP POLICY IF EXISTS "Managers can insert assignments" ON assignments;
+DROP POLICY IF EXISTS "Managers can update assignments" ON assignments;
+DROP POLICY IF EXISTS "Managers can delete assignments" ON assignments;
 
 -- Create role-based write policies
 CREATE POLICY "Managers can insert assignments"
@@ -74,10 +83,13 @@ USING (can_edit(auth.uid()));
 -- TRANSCRIPTS: Managers/Admins can modify, everyone can view
 -- ============================================================================
 
--- Drop existing permissive write policies
+-- Drop existing policies
 DROP POLICY IF EXISTS "Authenticated users can insert transcripts" ON transcripts;
 DROP POLICY IF EXISTS "Authenticated users can update transcripts" ON transcripts;
 DROP POLICY IF EXISTS "Authenticated users can delete transcripts" ON transcripts;
+DROP POLICY IF EXISTS "Managers can insert transcripts" ON transcripts;
+DROP POLICY IF EXISTS "Managers can update transcripts" ON transcripts;
+DROP POLICY IF EXISTS "Managers can delete transcripts" ON transcripts;
 
 -- Create role-based write policies
 CREATE POLICY "Managers can insert transcripts"
@@ -96,10 +108,14 @@ USING (can_edit(auth.uid()));
 -- MILESTONES: Managers/Admins can modify, everyone can view
 -- ============================================================================
 
--- Drop existing permissive write policies (if they exist)
+-- Drop existing policies (if they exist)
+DROP POLICY IF EXISTS "Authenticated users can view milestones" ON milestones;
 DROP POLICY IF EXISTS "Authenticated users can insert milestones" ON milestones;
 DROP POLICY IF EXISTS "Authenticated users can update milestones" ON milestones;
 DROP POLICY IF EXISTS "Authenticated users can delete milestones" ON milestones;
+DROP POLICY IF EXISTS "Managers can insert milestones" ON milestones;
+DROP POLICY IF EXISTS "Managers can update milestones" ON milestones;
+DROP POLICY IF EXISTS "Managers can delete milestones" ON milestones;
 
 -- Ensure RLS is enabled
 ALTER TABLE milestones ENABLE ROW LEVEL SECURITY;
@@ -126,10 +142,14 @@ USING (can_edit(auth.uid()));
 -- DELIVERABLES: Managers/Admins can modify, everyone can view
 -- ============================================================================
 
--- Drop existing permissive write policies (if they exist)
+-- Drop existing policies (if they exist)
+DROP POLICY IF EXISTS "Authenticated users can view deliverables" ON deliverables;
 DROP POLICY IF EXISTS "Authenticated users can insert deliverables" ON deliverables;
 DROP POLICY IF EXISTS "Authenticated users can update deliverables" ON deliverables;
 DROP POLICY IF EXISTS "Authenticated users can delete deliverables" ON deliverables;
+DROP POLICY IF EXISTS "Managers can insert deliverables" ON deliverables;
+DROP POLICY IF EXISTS "Managers can update deliverables" ON deliverables;
+DROP POLICY IF EXISTS "Managers can delete deliverables" ON deliverables;
 
 -- Ensure RLS is enabled
 ALTER TABLE deliverables ENABLE ROW LEVEL SECURITY;
@@ -157,10 +177,9 @@ USING (can_edit(auth.uid()));
 -- Admins can update anyone's role
 -- ============================================================================
 
--- Keep existing SELECT policy (all authenticated can view)
--- Update the UPDATE policy to be more nuanced
-
+-- Drop existing policies
 DROP POLICY IF EXISTS "Users can update their own profile" ON profiles;
+DROP POLICY IF EXISTS "Users can update own profile" ON profiles;
 
 -- Users can update their own profile (but not role field via app - that's admin only)
 CREATE POLICY "Users can update own profile"
@@ -171,10 +190,13 @@ USING (auth.uid() = id OR is_admin(auth.uid()));
 -- TIME ENTRIES: Managers/Admins can modify, everyone can view
 -- ============================================================================
 
--- Drop existing permissive write policies
+-- Drop existing policies
 DROP POLICY IF EXISTS "Authenticated users can insert time entries" ON time_entries;
 DROP POLICY IF EXISTS "Authenticated users can update time entries" ON time_entries;
 DROP POLICY IF EXISTS "Authenticated users can delete time entries" ON time_entries;
+DROP POLICY IF EXISTS "Managers can insert time entries" ON time_entries;
+DROP POLICY IF EXISTS "Managers can update time entries" ON time_entries;
+DROP POLICY IF EXISTS "Managers can delete time entries" ON time_entries;
 
 -- Role-based write policies
 CREATE POLICY "Managers can insert time entries"
@@ -193,10 +215,13 @@ USING (can_edit(auth.uid()));
 -- CAPACITY SNAPSHOTS: Managers/Admins can modify, everyone can view
 -- ============================================================================
 
--- Drop existing permissive write policies
+-- Drop existing policies
 DROP POLICY IF EXISTS "Authenticated users can insert capacity snapshots" ON capacity_snapshots;
 DROP POLICY IF EXISTS "Authenticated users can update capacity snapshots" ON capacity_snapshots;
 DROP POLICY IF EXISTS "Authenticated users can delete capacity snapshots" ON capacity_snapshots;
+DROP POLICY IF EXISTS "Managers can insert capacity snapshots" ON capacity_snapshots;
+DROP POLICY IF EXISTS "Managers can update capacity snapshots" ON capacity_snapshots;
+DROP POLICY IF EXISTS "Managers can delete capacity snapshots" ON capacity_snapshots;
 
 -- Role-based write policies
 CREATE POLICY "Managers can insert capacity snapshots"
