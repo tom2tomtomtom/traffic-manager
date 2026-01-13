@@ -1,7 +1,7 @@
 'use client'
 
-import { useState, useMemo } from 'react'
-import { User, Plus, X, Save, FolderKanban, Trash2 } from 'lucide-react'
+import { useState, useMemo, useRef, useEffect } from 'react'
+import { User, Check, ChevronRight, Zap, Plus } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useToast } from '@/components/ui/toast'
 import { useRouter } from 'next/navigation'
@@ -36,163 +36,186 @@ interface BulkEntryProps {
   existingAssignments: Assignment[]
 }
 
-interface PendingAssignment {
-  tempId: string
-  projectId: string
+interface QuickEntry {
+  id: string
+  text: string
   projectName: string
-  role: string
-  hoursThisWeek: number
+  hours: number
+  projectId: string | null
   isNew: boolean
-  existingId?: string
 }
-
-const ROLE_OPTIONS = [
-  { value: 'lead', label: 'Lead' },
-  { value: 'producer', label: 'Producer' },
-  { value: 'support', label: 'Support' },
-  { value: 'team-member', label: 'Team Member' },
-]
 
 export function BulkEntry({ teamMembers, projects, existingAssignments }: BulkEntryProps) {
   const [selectedMemberId, setSelectedMemberId] = useState<string | null>(null)
-  const [pendingAssignments, setPendingAssignments] = useState<PendingAssignment[]>([])
+  const [entries, setEntries] = useState<QuickEntry[]>([])
   const [saving, setSaving] = useState(false)
-  const [newProjectName, setNewProjectName] = useState('')
+  const [quickText, setQuickText] = useState('')
+  const inputRef = useRef<HTMLInputElement>(null)
   const { toast } = useToast()
   const router = useRouter()
 
   // Get selected member's data
   const selectedMember = teamMembers.find(m => m.id === selectedMemberId)
 
-  // Get existing assignments for selected member
-  const memberExistingAssignments = useMemo(() => {
-    if (!selectedMemberId) return []
-    return existingAssignments.filter(a => a.team_member_id === selectedMemberId)
-  }, [selectedMemberId, existingAssignments])
+  // Calculate progress
+  const membersWithData = useMemo(() => {
+    const memberIds = new Set(existingAssignments.map(a => a.team_member_id))
+    return teamMembers.filter(m => memberIds.has(m.id)).length
+  }, [teamMembers, existingAssignments])
 
-  // Calculate current allocated hours for selected member
-  const allocatedHours = useMemo(() => {
-    const existingHours = memberExistingAssignments.reduce(
-      (sum, a) => sum + (a.hours_this_week || 0),
-      0
-    )
-    const pendingHours = pendingAssignments.reduce(
-      (sum, a) => sum + (a.hoursThisWeek || 0),
-      0
-    )
-    return existingHours + pendingHours
-  }, [memberExistingAssignments, pendingAssignments])
+  // Calculate hours for selected member
+  const totalHours = entries.reduce((sum, e) => sum + e.hours, 0)
 
-  // When selecting a member, load their existing assignments as pending
+  // When selecting a member, load their existing assignments
   const handleSelectMember = (memberId: string) => {
     setSelectedMemberId(memberId)
+    setQuickText('')
 
-    // Load existing assignments for this member
+    // Load existing assignments
     const memberAssignments = existingAssignments.filter(a => a.team_member_id === memberId)
-    const loaded: PendingAssignment[] = memberAssignments.map(a => {
+    const loaded: QuickEntry[] = memberAssignments.map(a => {
       const project = projects.find(p => p.id === a.project_id)
       return {
-        tempId: a.id,
-        projectId: a.project_id,
+        id: a.id,
+        text: `${project?.name || 'Unknown'} ${a.hours_this_week}h`,
         projectName: project?.name || 'Unknown',
-        role: a.role_on_project,
-        hoursThisWeek: a.hours_this_week || 0,
+        hours: a.hours_this_week || 0,
+        projectId: a.project_id,
         isNew: false,
-        existingId: a.id,
       }
     })
 
-    setPendingAssignments(loaded)
+    setEntries(loaded)
+
+    // Focus input after selection
+    setTimeout(() => inputRef.current?.focus(), 100)
   }
 
-  // Add a new assignment row
-  const addAssignment = (projectId?: string) => {
-    const project = projectId ? projects.find(p => p.id === projectId) : null
-    setPendingAssignments([
-      ...pendingAssignments,
-      {
-        tempId: Math.random().toString(36).substring(7),
-        projectId: projectId || '',
-        projectName: project?.name || '',
-        role: 'team-member',
-        hoursThisWeek: 8,
-        isNew: true,
-      },
-    ])
-  }
+  // Parse quick text like "Legos 15" or "Officeworks 8h"
+  const parseQuickEntry = (text: string): { projectName: string; hours: number } | null => {
+    const trimmed = text.trim()
+    if (!trimmed) return null
 
-  // Remove an assignment
-  const removeAssignment = (tempId: string) => {
-    setPendingAssignments(pendingAssignments.filter(a => a.tempId !== tempId))
-  }
-
-  // Update an assignment field
-  const updateAssignment = (tempId: string, field: keyof PendingAssignment, value: string | number) => {
-    setPendingAssignments(
-      pendingAssignments.map(a => {
-        if (a.tempId !== tempId) return a
-        if (field === 'projectId') {
-          const project = projects.find(p => p.id === value)
-          return { ...a, projectId: value as string, projectName: project?.name || '' }
-        }
-        return { ...a, [field]: value }
-      })
-    )
-  }
-
-  // Create new project inline
-  const handleCreateProject = async () => {
-    if (!newProjectName.trim()) return
-
-    try {
-      const response = await fetch('/api/projects', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: newProjectName.trim(), status: 'active' }),
-      })
-
-      if (response.ok) {
-        toast.success(`Created project: ${newProjectName}`)
-        setNewProjectName('')
-        router.refresh()
-      } else {
-        toast.error('Failed to create project')
+    // Match patterns like "Project Name 15" or "Project Name 15h"
+    const match = trimmed.match(/^(.+?)\s+(\d+)h?$/i)
+    if (match) {
+      return {
+        projectName: match[1].trim(),
+        hours: parseInt(match[2], 10),
       }
-    } catch {
-      toast.error('Failed to create project')
+    }
+
+    // If no hours specified, default to 8
+    return {
+      projectName: trimmed,
+      hours: 8,
     }
   }
 
-  // Save all assignments
+  // Find matching project (fuzzy)
+  const findProject = (name: string): Project | null => {
+    const lower = name.toLowerCase()
+    // Exact match first
+    let match = projects.find(p => p.name.toLowerCase() === lower)
+    if (match) return match
+    // Partial match
+    match = projects.find(p => p.name.toLowerCase().includes(lower) || lower.includes(p.name.toLowerCase()))
+    return match || null
+  }
+
+  // Add entry from quick text
+  const handleAddEntry = () => {
+    const parsed = parseQuickEntry(quickText)
+    if (!parsed) return
+
+    const existingProject = findProject(parsed.projectName)
+
+    // Check if already added
+    if (entries.some(e => e.projectName.toLowerCase() === parsed.projectName.toLowerCase())) {
+      toast.warning(`${parsed.projectName} already added`)
+      return
+    }
+
+    setEntries([
+      ...entries,
+      {
+        id: Math.random().toString(36).substring(7),
+        text: quickText,
+        projectName: existingProject?.name || parsed.projectName,
+        hours: parsed.hours,
+        projectId: existingProject?.id || null,
+        isNew: true,
+      },
+    ])
+    setQuickText('')
+    inputRef.current?.focus()
+  }
+
+  // Remove entry
+  const removeEntry = (id: string) => {
+    setEntries(entries.filter(e => e.id !== id))
+  }
+
+  // Update hours inline
+  const updateHours = (id: string, hours: number) => {
+    setEntries(entries.map(e => e.id === id ? { ...e, hours } : e))
+  }
+
+  // Save all
   const handleSave = async () => {
-    if (!selectedMemberId || pendingAssignments.length === 0) return
+    if (!selectedMemberId || entries.length === 0) return
 
     setSaving(true)
     try {
+      // First, create any new projects
+      const newProjects = entries.filter(e => !e.projectId)
+      for (const entry of newProjects) {
+        const res = await fetch('/api/projects', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: entry.projectName, status: 'active' }),
+        })
+        if (res.ok) {
+          const { project } = await res.json()
+          entry.projectId = project.id
+        }
+      }
+
+      // Now save assignments
       const response = await fetch('/api/bulk-assignments', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           team_member_id: selectedMemberId,
-          assignments: pendingAssignments.map(a => ({
-            project_id: a.projectId,
-            role_on_project: a.role,
-            hours_this_week: a.hoursThisWeek,
-            existing_id: a.existingId,
+          assignments: entries.filter(e => e.projectId).map(e => ({
+            project_id: e.projectId,
+            role_on_project: 'team-member',
+            hours_this_week: e.hours,
           })),
         }),
       })
 
-      const result = await response.json()
-
       if (response.ok) {
-        toast.success(`Saved ${result.updated + result.created} assignments for ${selectedMember?.full_name}`)
+        toast.success(`Saved ${entries.length} assignments for ${selectedMember?.full_name}`)
+
+        // Auto-advance to next member without data
+        const nextMember = teamMembers.find(m =>
+          m.id !== selectedMemberId &&
+          !existingAssignments.some(a => a.team_member_id === m.id)
+        )
+
+        if (nextMember) {
+          handleSelectMember(nextMember.id)
+          toast.info(`Now entering for ${nextMember.full_name}`)
+        } else {
+          setSelectedMemberId(null)
+          setEntries([])
+        }
+
         router.refresh()
-        // Reset to allow entering next person
-        setSelectedMemberId(null)
-        setPendingAssignments([])
       } else {
-        toast.error(result.error || 'Failed to save assignments')
+        const result = await response.json()
+        toast.error(result.error || 'Failed to save')
       }
     } catch {
       toast.error('Failed to save assignments')
@@ -201,302 +224,231 @@ export function BulkEntry({ teamMembers, projects, existingAssignments }: BulkEn
     }
   }
 
-  // Get projects not yet assigned
-  const availableProjects = projects.filter(
-    p => !pendingAssignments.some(a => a.projectId === p.id)
-  )
+  // Keyboard handling
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && quickText.trim()) {
+      e.preventDefault()
+      handleAddEntry()
+    }
+  }
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-      {/* Team Members List */}
-      <div className="lg:col-span-1">
-        <div className="bg-black-card border-2 border-border-subtle p-4">
-          <h3 className="text-xs font-bold uppercase tracking-wide text-orange-accent mb-4">
-            Select Team Member
-          </h3>
-
-          <div className="space-y-2 max-h-[60vh] overflow-y-auto">
-            {teamMembers.map(member => {
-              const memberAssignments = existingAssignments.filter(
-                a => a.team_member_id === member.id
-              )
-              const memberAllocated = memberAssignments.reduce(
-                (sum, a) => sum + (a.hours_this_week || 0),
-                0
-              )
-              const hasData = memberAssignments.length > 0
-              const isSelected = selectedMemberId === member.id
-
-              return (
-                <button
-                  key={member.id}
-                  onClick={() => handleSelectMember(member.id)}
-                  className={cn(
-                    'w-full text-left p-3 border-2 transition-all',
-                    isSelected
-                      ? 'border-orange-accent bg-orange-accent/10'
-                      : hasData
-                        ? 'border-border-subtle bg-black-deep hover:border-orange-accent'
-                        : 'border-dashed border-border-subtle hover:border-orange-accent'
-                  )}
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <User className="w-4 h-4 text-white-dim" />
-                      <span className="text-white-full font-medium text-sm">
-                        {member.full_name}
-                      </span>
-                    </div>
-                    {hasData && (
-                      <span className="text-xs text-white-muted">
-                        {memberAllocated}h
-                      </span>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-2 mt-1">
-                    <span className="text-xs text-white-dim">{member.role}</span>
-                    {!hasData && (
-                      <span className="text-xs text-yellow-electric">No data</span>
-                    )}
-                  </div>
-                </button>
-              )
-            })}
-          </div>
+    <div className="space-y-6">
+      {/* Progress bar */}
+      <div className="bg-black-card border-2 border-border-subtle p-4">
+        <div className="flex items-center justify-between mb-2">
+          <span className="text-xs font-bold uppercase text-white-dim">Setup Progress</span>
+          <span className="text-sm font-bold text-orange-accent">
+            {membersWithData} / {teamMembers.length} people
+          </span>
+        </div>
+        <div className="bg-black-deep h-2">
+          <div
+            className="bg-orange-accent h-full transition-all"
+            style={{ width: `${(membersWithData / teamMembers.length) * 100}%` }}
+          />
         </div>
       </div>
 
-      {/* Assignment Entry Form */}
-      <div className="lg:col-span-2">
-        {selectedMember ? (
-          <div className="bg-black-card border-2 border-border-subtle p-6">
-            {/* Header with capacity bar */}
-            <div className="flex items-center justify-between mb-6">
-              <div>
-                <h3 className="text-lg font-bold text-white-full">
-                  {selectedMember.full_name}
-                </h3>
-                <p className="text-sm text-white-dim">{selectedMember.role}</p>
-              </div>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Team Members List */}
+        <div className="lg:col-span-1">
+          <div className="bg-black-card border-2 border-border-subtle p-4">
+            <h3 className="text-xs font-bold uppercase tracking-wide text-orange-accent mb-4">
+              Team Members
+            </h3>
 
-              <div className="text-right">
-                <div className="text-2xl font-bold">
-                  <span
+            <div className="space-y-1 max-h-[55vh] overflow-y-auto">
+              {teamMembers.map(member => {
+                const hasData = existingAssignments.some(a => a.team_member_id === member.id)
+                const isSelected = selectedMemberId === member.id
+
+                return (
+                  <button
+                    key={member.id}
+                    onClick={() => handleSelectMember(member.id)}
                     className={cn(
-                      allocatedHours > selectedMember.weekly_capacity_hours
-                        ? 'text-red-hot'
-                        : 'text-orange-accent'
+                      'w-full text-left p-3 border-2 transition-all flex items-center justify-between',
+                      isSelected
+                        ? 'border-orange-accent bg-orange-accent/10'
+                        : hasData
+                          ? 'border-green-500/30 bg-green-500/5 hover:border-orange-accent'
+                          : 'border-transparent hover:border-border-subtle'
                     )}
                   >
-                    {allocatedHours}
-                  </span>
-                  <span className="text-white-dim">
-                    /{selectedMember.weekly_capacity_hours}h
-                  </span>
+                    <div className="flex items-center gap-2">
+                      {hasData ? (
+                        <Check className="w-4 h-4 text-green-500" />
+                      ) : (
+                        <User className="w-4 h-4 text-white-dim" />
+                      )}
+                      <span className={cn(
+                        'text-sm',
+                        hasData ? 'text-white-muted' : 'text-white-full font-medium'
+                      )}>
+                        {member.full_name}
+                      </span>
+                    </div>
+                    {isSelected && <ChevronRight className="w-4 h-4 text-orange-accent" />}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+        </div>
+
+        {/* Quick Entry Form */}
+        <div className="lg:col-span-2">
+          {selectedMember ? (
+            <div className="bg-black-card border-2 border-border-subtle p-6">
+              {/* Header */}
+              <div className="flex items-center justify-between mb-6">
+                <div>
+                  <h3 className="text-xl font-bold text-white-full">
+                    {selectedMember.full_name}
+                  </h3>
+                  <p className="text-sm text-white-dim">{selectedMember.role}</p>
                 </div>
-                <p className="text-xs text-white-dim uppercase tracking-wide">
-                  Weekly Capacity
+                <div className="text-right">
+                  <div className="text-3xl font-bold">
+                    <span className={cn(
+                      totalHours > selectedMember.weekly_capacity_hours ? 'text-red-hot' : 'text-orange-accent'
+                    )}>
+                      {totalHours}
+                    </span>
+                    <span className="text-white-dim text-lg">/{selectedMember.weekly_capacity_hours}h</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Quick Entry Input */}
+              <div className="mb-6">
+                <label className="block text-xs font-bold uppercase text-white-dim mb-2">
+                  Quick Add (type project name + hours)
+                </label>
+                <div className="flex gap-2">
+                  <div className="relative flex-1">
+                    <Zap className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-orange-accent" />
+                    <input
+                      ref={inputRef}
+                      type="text"
+                      value={quickText}
+                      onChange={e => setQuickText(e.target.value)}
+                      onKeyDown={handleKeyDown}
+                      placeholder="e.g. Legos 15 or Officeworks 8"
+                      className="w-full pl-10 pr-4 py-3 bg-black-deep text-white-full border-2 border-border-subtle text-lg focus:border-orange-accent outline-none"
+                      autoComplete="off"
+                    />
+                  </div>
+                  <button
+                    onClick={handleAddEntry}
+                    disabled={!quickText.trim()}
+                    className="px-6 py-3 bg-orange-accent text-black-ink font-bold uppercase text-sm disabled:opacity-50"
+                  >
+                    <Plus className="w-5 h-5" />
+                  </button>
+                </div>
+                <p className="text-xs text-white-dim mt-2">
+                  Press Enter to add. New projects will be created automatically.
                 </p>
               </div>
-            </div>
 
-            {/* Capacity bar */}
-            <div className="mb-6 bg-black-deep h-2">
-              <div
-                className={cn(
-                  'h-full transition-all',
-                  allocatedHours > selectedMember.weekly_capacity_hours
-                    ? 'bg-red-hot'
-                    : 'bg-orange-accent'
-                )}
-                style={{
-                  width: `${Math.min(
-                    (allocatedHours / selectedMember.weekly_capacity_hours) * 100,
-                    100
-                  )}%`,
-                }}
-              />
-            </div>
-
-            {/* Assignments list */}
-            <div className="space-y-3 mb-6">
-              {pendingAssignments.length === 0 ? (
-                <div className="text-center py-8 border-2 border-dashed border-border-subtle">
-                  <FolderKanban className="w-8 h-8 text-white-dim mx-auto mb-2" />
-                  <p className="text-white-muted text-sm">No assignments yet</p>
-                  <p className="text-white-dim text-xs mt-1">
-                    Add projects this person is working on
-                  </p>
-                </div>
-              ) : (
-                pendingAssignments.map(assignment => (
-                  <div
-                    key={assignment.tempId}
-                    className={cn(
-                      'flex items-center gap-3 p-3 border-2',
-                      assignment.isNew ? 'border-orange-accent' : 'border-border-subtle'
-                    )}
-                  >
-                    {/* Project selector */}
-                    <select
-                      value={assignment.projectId}
-                      onChange={e =>
-                        updateAssignment(assignment.tempId, 'projectId', e.target.value)
-                      }
-                      className="flex-1 bg-black-deep text-white-full border-2 border-border-subtle px-3 py-2 text-sm focus:border-orange-accent outline-none"
-                    >
-                      <option value="">Select project...</option>
-                      {[
-                        ...(assignment.projectId
-                          ? [projects.find(p => p.id === assignment.projectId)].filter(
-                              Boolean
-                            )
-                          : []),
-                        ...availableProjects,
-                      ].map(project =>
-                        project ? (
-                          <option key={project.id} value={project.id}>
-                            {project.name}
-                            {project.client ? ` (${project.client})` : ''}
-                          </option>
-                        ) : null
-                      )}
-                    </select>
-
-                    {/* Role selector */}
-                    <select
-                      value={assignment.role}
-                      onChange={e =>
-                        updateAssignment(assignment.tempId, 'role', e.target.value)
-                      }
-                      className="w-32 bg-black-deep text-white-full border-2 border-border-subtle px-3 py-2 text-sm focus:border-orange-accent outline-none"
-                    >
-                      {ROLE_OPTIONS.map(opt => (
-                        <option key={opt.value} value={opt.value}>
-                          {opt.label}
-                        </option>
-                      ))}
-                    </select>
-
-                    {/* Hours input */}
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="number"
-                        min="0"
-                        max="60"
-                        value={assignment.hoursThisWeek}
-                        onChange={e =>
-                          updateAssignment(
-                            assignment.tempId,
-                            'hoursThisWeek',
-                            parseInt(e.target.value) || 0
-                          )
-                        }
-                        className="w-16 bg-black-deep text-white-full border-2 border-border-subtle px-3 py-2 text-sm text-center focus:border-orange-accent outline-none"
-                      />
-                      <span className="text-white-dim text-sm">hrs</span>
-                    </div>
-
-                    {/* Remove button */}
-                    <button
-                      onClick={() => removeAssignment(assignment.tempId)}
-                      className="p-2 text-white-dim hover:text-red-hot transition-colors"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
+              {/* Entries List */}
+              <div className="space-y-2 mb-6">
+                {entries.length === 0 ? (
+                  <div className="text-center py-8 border-2 border-dashed border-border-subtle">
+                    <p className="text-white-muted">No projects yet</p>
+                    <p className="text-white-dim text-sm mt-1">
+                      Type a project name and hours above
+                    </p>
                   </div>
-                ))
-              )}
-            </div>
-
-            {/* Add assignment row */}
-            <div className="flex items-center gap-3 mb-6">
-              <button
-                onClick={() => addAssignment()}
-                className="flex items-center gap-2 px-4 py-2 text-xs font-bold uppercase tracking-wide border-2 border-dashed border-border-subtle text-white-muted hover:border-orange-accent hover:text-orange-accent transition-all"
-              >
-                <Plus className="w-4 h-4" />
-                Add Project
-              </button>
-
-              {/* Quick add from unassigned projects */}
-              {availableProjects.length > 0 && (
-                <select
-                  value=""
-                  onChange={e => {
-                    if (e.target.value) addAssignment(e.target.value)
-                  }}
-                  className="bg-black-deep text-white-muted border-2 border-border-subtle px-3 py-2 text-xs focus:border-orange-accent outline-none"
-                >
-                  <option value="">Quick add project...</option>
-                  {availableProjects.map(project => (
-                    <option key={project.id} value={project.id}>
-                      {project.name}
-                    </option>
-                  ))}
-                </select>
-              )}
-            </div>
-
-            {/* Create new project inline */}
-            <div className="flex items-center gap-3 mb-6 pb-6 border-b border-border-subtle">
-              <input
-                type="text"
-                value={newProjectName}
-                onChange={e => setNewProjectName(e.target.value)}
-                placeholder="New project name..."
-                className="flex-1 bg-black-deep text-white-full border-2 border-border-subtle px-3 py-2 text-sm focus:border-orange-accent outline-none"
-                onKeyDown={e => {
-                  if (e.key === 'Enter') handleCreateProject()
-                }}
-              />
-              <button
-                onClick={handleCreateProject}
-                disabled={!newProjectName.trim()}
-                className="px-4 py-2 text-xs font-bold uppercase tracking-wide border-2 border-border-subtle text-white-muted hover:border-orange-accent hover:text-orange-accent transition-all disabled:opacity-50"
-              >
-                Create Project
-              </button>
-            </div>
-
-            {/* Save button */}
-            <div className="flex items-center justify-between">
-              <button
-                onClick={() => {
-                  setSelectedMemberId(null)
-                  setPendingAssignments([])
-                }}
-                className="px-4 py-2 text-xs font-bold uppercase tracking-wide text-white-muted hover:text-white-full transition-colors"
-              >
-                Cancel
-              </button>
-
-              <button
-                onClick={handleSave}
-                disabled={saving || pendingAssignments.length === 0}
-                className={cn(
-                  'flex items-center gap-2 px-6 py-3 text-sm font-bold uppercase tracking-wide border-2 transition-all',
-                  'bg-orange-accent text-black-ink border-orange-accent hover:bg-orange-accent/90',
-                  'disabled:opacity-50 disabled:cursor-not-allowed'
+                ) : (
+                  entries.map(entry => (
+                    <div
+                      key={entry.id}
+                      className={cn(
+                        'flex items-center justify-between p-3 border-2',
+                        entry.isNew ? 'border-orange-accent/50' : 'border-border-subtle',
+                        !entry.projectId && entry.isNew && 'border-yellow-electric/50'
+                      )}
+                    >
+                      <div className="flex items-center gap-3">
+                        <span className="text-white-full font-medium">{entry.projectName}</span>
+                        {!entry.projectId && entry.isNew && (
+                          <span className="text-[10px] uppercase font-bold text-yellow-electric bg-yellow-electric/20 px-2 py-0.5">
+                            New Project
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <input
+                          type="number"
+                          value={entry.hours}
+                          onChange={e => updateHours(entry.id, parseInt(e.target.value) || 0)}
+                          className="w-16 bg-black-deep text-white-full border-2 border-border-subtle px-2 py-1 text-center text-lg font-bold focus:border-orange-accent outline-none"
+                          min="0"
+                          max="60"
+                        />
+                        <span className="text-white-dim text-sm">hrs</span>
+                        <button
+                          onClick={() => removeEntry(entry.id)}
+                          className="text-white-dim hover:text-red-hot transition-colors ml-2"
+                        >
+                          ×
+                        </button>
+                      </div>
+                    </div>
+                  ))
                 )}
-              >
-                <Save className="w-4 h-4" />
-                {saving ? 'Saving...' : 'Save Assignments'}
-              </button>
+              </div>
+
+              {/* Save Button */}
+              <div className="flex items-center justify-between pt-4 border-t border-border-subtle">
+                <button
+                  onClick={() => {
+                    setSelectedMemberId(null)
+                    setEntries([])
+                  }}
+                  className="text-white-muted hover:text-white-full text-sm"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleSave}
+                  disabled={saving || entries.length === 0}
+                  className={cn(
+                    'px-8 py-3 font-bold uppercase text-sm transition-all',
+                    'bg-orange-accent text-black-ink hover:bg-orange-accent/90',
+                    'disabled:opacity-50 disabled:cursor-not-allowed'
+                  )}
+                >
+                  {saving ? 'Saving...' : `Save & Continue`}
+                </button>
+              </div>
             </div>
-          </div>
-        ) : (
-          <div className="bg-black-card border-2 border-dashed border-border-subtle p-12 text-center">
-            <User className="w-12 h-12 text-white-dim mx-auto mb-4" />
-            <h3 className="text-lg font-bold text-white-muted mb-2">
-              Select a Team Member
-            </h3>
-            <p className="text-sm text-white-dim max-w-md mx-auto">
-              Choose a team member from the left to enter their current project
-              assignments. This will populate the capacity dashboard.
-            </p>
-          </div>
-        )}
+          ) : (
+            <div className="bg-black-card border-2 border-dashed border-border-subtle p-12 text-center">
+              <User className="w-12 h-12 text-white-dim mx-auto mb-4" />
+              <h3 className="text-lg font-bold text-white-muted mb-2">
+                Select a Team Member
+              </h3>
+              <p className="text-sm text-white-dim max-w-md mx-auto mb-6">
+                Click on a name to enter their current project assignments.
+              </p>
+              {membersWithData === 0 && (
+                <button
+                  onClick={() => {
+                    const first = teamMembers[0]
+                    if (first) handleSelectMember(first.id)
+                  }}
+                  className="px-6 py-3 bg-orange-accent text-black-ink font-bold uppercase text-sm"
+                >
+                  Start with {teamMembers[0]?.full_name?.split(' ')[0] || 'First Person'}
+                </button>
+              )}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   )
